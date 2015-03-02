@@ -1,0 +1,221 @@
+
+TITLE 	Really Complicated Array Summation Device		(Project06.asm)
+
+
+; Author: Tracy Stinghen
+; Email: stinghet@onid.oregonstate.edu
+; Class: CS 271 Summer 2014
+; Assignment: Assignment 6
+; Due Date: 8/31/14
+; Date Created: 8/27/14
+; Last Modification Date: 8/15/14
+; Program Description: Takes 10 numbers and gives their sum and average
+; using MACROS and validating the hard way
+ 
+
+INCLUDE Irvine32.inc
+
+DisplayString	MACRO	the_string
+	push	edx				;Save edx register
+	mov		edx, OFFSET the_string
+	call	WriteString
+	pop		edx				;Restore edx
+ENDM
+
+
+GetString	MACRO	prompt, the_string
+	push	edx				;Save edx register
+	push	eax				;Save eax register
+	push	ecx				;save ecx register
+	mov		edx, OFFSET prompt	;specifies what we're collecting
+	call	WriteString 
+	mov		edx, OFFSET the_string 
+	mov		ecx, MAX_STRING		;number of places reserved for the string	
+	call	ReadString 
+	pop		ecx
+	pop		eax
+	pop		edx				;Restore registers
+ENDM
+
+
+
+REG_LIMIT = 2147483647		;max number that will fit in a register
+ARR_SIZE = 11				;number of terms we are collecting (plus /0) 
+MAX_STRING = 10
+END_STRING = 0				
+HI_VAL = 57					;highest ASCII number for an int
+LO_VAL = 48					;lowest ASCII number for an int
+
+.data
+string_array	DWORD	ARR_SIZE	DUP(?)
+int_array		DWORD	ARR_SIZE	DUP(?)
+test_val		DWORD	0
+arr_count		DWORD	0
+conv_int		DWORD	0
+intro_1		BYTE	"Watch me sum some numbers (in a really complicated way)", 0
+intro_2		BYTE	"By Tracy Stinghen", 0
+prompt_1	BYTE	"(We are collecting 10 numbers) Please enter a number: ", 0
+err_msg		BYTE	"That is not a reasonable number. It contains letters or is over 2 billion. ", 0
+title_1		BYTE	"Here are the numbers you entered: ", 0
+sum_msg		BYTE	"The sum of the numbers is: ", 0
+avg_msg		BYTE	"The average of the numbers is: ", 0
+spaces		BYTE	"   ", 0
+user_name	BYTE	33 DUP(0)	;string to be entered by user 
+
+.code
+main PROC
+	
+	call	Intro
+
+	push	OFFSET int_array
+	push	OFFSET test_val	
+	push	arr_count
+	push	OFFSET conv_int
+	call	ReadVal
+
+	push	OFFSET int_array
+	call	WriteVal
+
+	exit			;exit to operating system
+main ENDP
+
+; ***************************************************************
+; Procedure to introduce the program, changes no registers
+; ***************************************************************
+
+Intro	PROC 
+	DisplayString	intro_1 
+	call	CrLf
+	DisplayString	intro_2
+	call	CrLf
+	
+	ret 
+Intro	ENDP	
+
+
+
+; ***************************************************************
+; Procedure to accept 10 strings, validate them, convert them into ints
+; and put them into an array
+; receives: address of int_array, address of test_val (user input string) and 
+; conv_int (string converted to int), and arr_count (tracks the number of items in array) 
+; returns: array full of ints
+; preconditions: none
+; registers changed: eax, ebx, ecx, edx, esi, edi
+; ***************************************************************
+
+
+
+ReadVal	PROC 
+	push	ebp 
+	mov		ebp, esp 
+	mov		edi, [ebp+8]		;conv_int
+	mov		ebx, [ebp+12]		;arr_count
+	mov		esi, [ebp+16]		;test_val
+	mov		edx, [ebp+20]		;address of int_array
+
+input_loop:
+	GetString prompt_1, test_val	;get a string input into edi
+	
+	mov		esi, [ebp+16]			;OFFSET of test_val (user's string input)
+	mov		edi, [ebp+8]			;OFFSET of conv_int (string after being converted to int)
+
+	mov		ecx, 0				;move ecx 0 (we're going to add to this)
+	mov		eax, 0
+convert_loop: 
+	
+	lodsb						;load the next 
+	cmp		al, END_STRING		;is it a terminating char? 
+	je		store_val			;then terminate
+	cmp		al, HI_VAL			;is it bigger than an int?
+	ja		error				;get a new value
+	cmp		al, LO_VAL			;is it smaller than an int?
+	jb		error				;get a new value
+
+	sub		al, LO_VAL			;convert ASCII to decimal 
+	stosb
+
+	push	eax					;save registers
+	push	edx
+	mov		eax, 10
+	mul		ecx					;move the previous total up one decimal place
+	mov		ecx, eax			;save the current number in ecx
+	pop		edx
+	pop		eax
+	
+	add		eax, ecx			;add the converted int to the end of the current number
+	mov		ecx, eax			
+
+	jmp		convert_loop
+	
+store_val: 
+	cmp		ecx, REG_LIMIT		;if the finished number won't fit in a register...
+	ja		error				;that's a problem
+	mov		[edx], ecx			;add that number to the array
+	add		edx, 4				;move to the next empty array spot
+	inc		ebx
+	cmp		ebx, (ARR_SIZE-1)	;see if the array is full
+	jl		input_loop 
+	jmp		endproc
+
+error: 
+	DisplayString err_msg		;tells the user what might be wrong with their number
+	call	CrLf
+	jmp		input_loop
+
+endproc:
+	pop		ebp
+	
+	ret		16
+
+ReadVal	ENDP	
+
+; ***************************************************************
+; Procedure to iterate through an array, sum the values, print the values 
+; and calculate the average
+; receives: address of int_array on the system stack
+; returns: printed values
+; preconditions: array must be filled with 10 integers
+; registers changed: eax, ebx, ecx, edx, esi
+; ***************************************************************
+
+
+
+WriteVal	PROC 
+
+	push	ebp
+	mov		ebp, esp 
+	mov		esi, [ebp+8]		;OFFSET of the array
+	mov		ecx, 0
+	mov		ebx, 0
+
+more: 
+	mov		eax, [esi+ecx*4]	;for the current item in the array
+	call	WriteDec			;print it
+	DisplayString spaces
+	add		eax, ebx			;add it to the running summation
+	mov		ebx, eax
+	inc		ecx 
+	cmp		ecx, (ARR_SIZE - 1) ;see if we're at the end of the array
+	jge		endproc		
+	jmp		more
+
+endproc: 
+	call	CrLf
+	DisplayString sum_msg		;print the sum
+	mov		eax, ebx 
+	call	WriteDec 
+	call	CrLf
+	DisplayString avg_msg
+	mov		edx, 0
+	mov		ebx, 10				;divide the sum by # items in the array to get the average
+	div		ebx  
+	call	WriteDec			;print the average
+	call	CrLf
+	pop		ebp
+	ret		4
+WriteVal	ENDP
+
+
+
+END main

@@ -1,2 +1,2 @@
 # sample-code
-Sample code for 
+Sample code for showing to people
